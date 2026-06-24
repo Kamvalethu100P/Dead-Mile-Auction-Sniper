@@ -222,6 +222,44 @@ th {
   gap: 1.5rem;
 }
 
-textarea {
-  resize: vertical;
+.selected-row {
+  background-color: #e3f2fd !important;
+}
+
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.status-badge.empty {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.status-badge.returning {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.status-badge.busy {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+button.accept-btn {
+  background-color: var(--accent-color);
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+button.accept-btn:hover {
+  background-color: #219150;
+}
+
+.text-muted {
+  color: #7f8c8d;
+  font-style: italic;
 }

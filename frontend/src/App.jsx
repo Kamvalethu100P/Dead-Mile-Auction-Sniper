@@ -19,30 +19,31 @@ function App() {
       <header>
         <h1>Dead Mile Auction Sniper</h1>
         <div className="status-bar">
-          Backend Status: <strong>{health}</strong>
+          Backend: <strong className={health.includes('Error') ? 'error' : 'healthy'}>{health}</strong>
         </div>
-        <nav className="tabs">
-          <button 
-            className={activeTab === 'fleet' ? 'active' : ''} 
-            onClick={() => setActiveTab('fleet')}
-          >
-            Fleet Capacity
-          </button>
-          <button 
-            className={activeTab === 'auction' ? 'active' : ''} 
-            onClick={() => setActiveTab('auction')}
-          >
-            Live Auction
-          </button>
-        </nav>
       </header>
       
+      <nav className="main-nav">
+        <button 
+          className={activeTab === 'fleet' ? 'active' : ''} 
+          onClick={() => setActiveTab('fleet')}
+        >
+          Fleet Capacity
+        </button>
+        <button 
+          className={activeTab === 'auction' ? 'active' : ''} 
+          onClick={() => setActiveTab('auction')}
+        >
+          Live Auction
+        </button>
+      </nav>
+
       <main>
         {activeTab === 'fleet' ? <FleetManager /> : <AuctionMode />}
       </main>
 
       <footer>
-        <p>Logistics intelligence matching engine.</p>
+        <p>&copy; 2026 Dead Mile Auction Sniper. All rights reserved.</p>
       </footer>
     </div>
   )
