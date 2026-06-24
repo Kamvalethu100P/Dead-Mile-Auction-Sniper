@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import FleetManager from './FleetManager'
-import FreightManager from './FreightManager'
+import AuctionMode from './AuctionMode'
 import './App.css'
 
 function App() {
@@ -10,7 +10,7 @@ function App() {
 
   useEffect(() => {
     axios.get('/api/health')
-      .then(res => setHealth(res.data.status === 'ok' ? 'Healthy' : 'Warning'))
+      .then(res => setHealth(res.data.message))
       .catch(err => setHealth('Error connecting to backend'))
   }, [])
 
@@ -19,31 +19,30 @@ function App() {
       <header>
         <h1>Dead Mile Auction Sniper</h1>
         <div className="status-bar">
-          Backend Status: <strong className={health.toLowerCase()}>{health}</strong>
+          Backend Status: <strong>{health}</strong>
         </div>
+        <nav className="tabs">
+          <button 
+            className={activeTab === 'fleet' ? 'active' : ''} 
+            onClick={() => setActiveTab('fleet')}
+          >
+            Fleet Capacity
+          </button>
+          <button 
+            className={activeTab === 'auction' ? 'active' : ''} 
+            onClick={() => setActiveTab('auction')}
+          >
+            Live Auction
+          </button>
+        </nav>
       </header>
-
-      <nav className="main-nav">
-        <button 
-          className={activeTab === 'fleet' ? 'active' : ''} 
-          onClick={() => setActiveTab('fleet')}
-        >
-          Fleet Management
-        </button>
-        <button 
-          className={activeTab === 'freight' ? 'active' : ''} 
-          onClick={() => setActiveTab('freight')}
-        >
-          Freight Loads
-        </button>
-      </nav>
       
       <main>
-        {activeTab === 'fleet' ? <FleetManager /> : <FreightManager />}
+        {activeTab === 'fleet' ? <FleetManager /> : <AuctionMode />}
       </main>
 
       <footer>
-        <p>&copy; 2026 Dead Mile Auction Sniper. Recovering lost revenue, one mile at a time.</p>
+        <p>Logistics intelligence matching engine.</p>
       </footer>
     </div>
   )
