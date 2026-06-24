@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Link, NavLink } from 'react-router-dom'
 import axios from 'axios'
 import FleetManager from './FleetManager'
-import AuctionMode from './AuctionMode'
+import AuctionPage from './AuctionPage'
 import './App.css'
 
 function App() {
   const [health, setHealth] = useState('Checking...')
-  const [activeTab, setActiveTab] = useState('fleet')
 
   useEffect(() => {
     axios.get('/api/health')
@@ -15,37 +15,33 @@ function App() {
   }, [])
 
   return (
-    <div className="App">
-      <header>
-        <h1>Dead Mile Auction Sniper</h1>
-        <div className="status-bar">
-          Backend: <strong className={health.includes('Error') ? 'error' : 'healthy'}>{health}</strong>
-        </div>
-      </header>
-      
-      <nav className="main-nav">
-        <button 
-          className={activeTab === 'fleet' ? 'active' : ''} 
-          onClick={() => setActiveTab('fleet')}
-        >
-          Fleet Capacity
-        </button>
-        <button 
-          className={activeTab === 'auction' ? 'active' : ''} 
-          onClick={() => setActiveTab('auction')}
-        >
-          Live Auction
-        </button>
-      </nav>
+    <Router>
+      <div className="App">
+        <header>
+          <div className="header-left">
+            <h1>Dead Mile Auction Sniper</h1>
+            <nav className="main-nav">
+              <NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''} end>Fleet Capacity</NavLink>
+              <NavLink to="/auction" className={({ isActive }) => isActive ? 'active' : ''}>Live Auction</NavLink>
+            </nav>
+          </div>
+          <div className="status-bar">
+            Backend: <strong className={health.includes('Error') ? 'error' : 'healthy'}>{health}</strong>
+          </div>
+        </header>
 
-      <main>
-        {activeTab === 'fleet' ? <FleetManager /> : <AuctionMode />}
-      </main>
+        <main>
+          <Routes>
+            <Route path="/" element={<FleetManager />} />
+            <Route path="/auction" element={<AuctionPage />} />
+          </Routes>
+        </main>
 
-      <footer>
-        <p>&copy; 2026 Dead Mile Auction Sniper. All rights reserved.</p>
-      </footer>
-    </div>
+        <footer>
+          <p>&copy; 2026 Dead Mile Auction Sniper. All rights reserved.</p>
+        </footer>
+      </div>
+    </Router>
   )
 }
 

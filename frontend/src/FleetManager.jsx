@@ -13,8 +13,9 @@ const FleetManager = () => {
         status: 'available'
     });
     const [dispatchLog, setDispatchLog] = useState('');
-    const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
+    const [auctionListing, setAuctionListing] = useState({ truck_id: null, route_from: '', route_to: '', available_capacity: '' });
+    const [showListingModal, setShowListingModal] = useState(false);
 
     useEffect(() => {
         fetchTrucks();
@@ -86,137 +87,119 @@ const FleetManager = () => {
         a.click();
     };
 
-    const parseDispatchLog = async () => {
-        // Simple regex parser for common dispatch log formats
-        // Example: "TRUCK GP1234 - FLATBED - 22T - FROM Pretoria TO Durban - STATUS Available"
-        const lines = dispatchLog.split('\n');
-        const parsedTrucks = [];
-        
-        lines.forEach(line => {
-            if (!line.trim()) return;
-            
-            // Very basic heuristic parser
-            const plateMatch = line.match(/([A-Z0-9]{4,10})/);
-            const typeMatch = line.match(/(flatbed|refrigerated|box|tipper)/i);
-            const capacityMatch = line.match(/(\d+)\s*T/i);
-            const fromToMatch = line.match(/FROM (.*?) TO (.*?)( -|$)/i);
-            const statusMatch = line.match(/STATUS (available|busy|maintenance)/i);
-
-            if (plateMatch) {
-                parsedTrucks.push({
-                    plate: plateMatch[1],
-                    type: typeMatch ? typeMatch[1].toLowerCase() : 'box',
-                    capacity: capacityMatch ? capacityMatch[1] : 20,
-                    location: fromToMatch ? fromToMatch[1] : 'Unknown',
-                    return_destination: fromToMatch ? fromToMatch[2] : 'Unknown',
-                    status: statusMatch ? statusMatch[1].toLowerCase() : 'available'
-                });
-            }
+    const handleOpenListingModal = (truck) => {
+        setAuctionListing({
+            truck_id: truck.id,
+            route_from: truck.location,
+            route_to: truck.return_destination,
+            available_capacity: truck.capacity
         });
+        setShowListingModal(true);
+    };
 
-        if (parsedTrucks.length > 0) {
-            try {
-                await axios.post('/api/fleet/bulk', parsedTrucks);
-                setMessage(`${parsedTrucks.length} trucks parsed and added`);
-                setDispatchLog('');
-                fetchTrucks();
-            } catch (error) {
-                setMessage('Error saving parsed trucks: ' + error.message);
-            }
-        } else {
-            setMessage('Could not parse any trucks from the log');
+    const handleListingSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            await axios.post('/api/auction/listings', auctionListing);
+            setMessage('Auction listing created!');
+            setShowListingModal(false);
+            setTimeout(() => setMessage(''), 3000);
+        } catch (error) {
+            setMessage('Error creating listing: ' + error.message);
         }
     };
 
     return (
         <div className="fleet-manager">
-            <h2>Fleet Capacity Input</h2>
+            <h2>Fleet Capacity Management</h2>
             
             {message && <div className="message">{message}</div>}
 
-            <section>
-                <h3>Manual Entry</h3>
-                <form onSubmit={handleManualSubmit}>
-                    <div className="form-group">
-                        <label>Plate</label>
-                        <input 
-                            placeholder="Plate" 
-                            value={manualTruck.plate} 
-                            onChange={e => setManualTruck({...manualTruck, plate: e.target.value})} 
-                            required 
-                        />
-                    </div>
-                    <div className="form-group">
-                        <label>Type</label>
-                        <select 
-                            value={manualTruck.type} 
-                            onChange={e => setManualTruck({...manualTruck, type: e.target.value})}
-                        >
-                            <option value="flatbed">Flatbed</option>
-                            <option value="refrigerated">Refrigerated</option>
-                            <option value="box">Box</option>
-                            <option value="tipper">Tipper</option>
-                        </select>
-                    </div>
-                    <div className="form-group">
-                        <label>Capacity (tons)</label>
-                        <input 
-                            placeholder="Capacity" 
-                            type="number" 
-                            value={manualTruck.capacity} 
-                            onChange={e => setManualTruck({...manualTruck, capacity: e.target.value})} 
-                            required 
-                        />
-                    </div>
-                    <div className="form-group">
-                        <label>Current Location</label>
-                        <input 
-                            placeholder="Location" 
-                            value={manualTruck.location} 
-                            onChange={e => setManualTruck({...manualTruck, location: e.target.value})} 
-                            required 
-                        />
-                    </div>
-                    <div className="form-group">
-                        <label>Return Destination</label>
-                        <input 
-                            placeholder="Return" 
-                            value={manualTruck.return_destination} 
-                            onChange={e => setManualTruck({...manualTruck, return_destination: e.target.value})} 
-                            required 
-                        />
-                    </div>
-                    <div className="form-group">
-                        <label>Status</label>
-                        <select 
-                            value={manualTruck.status} 
-                            onChange={e => setManualTruck({...manualTruck, status: e.target.value})}
-                        >
-                            <option value="available">Available</option>
-                            <option value="busy">Busy</option>
-                            <option value="maintenance">Maintenance</option>
-                        </select>
-                    </div>
-                    <button type="submit">Add Truck</button>
-                </form>
-            </section>
-
             <div className="input-sections">
                 <section>
-                    <h3>CSV Upload</h3>
-                    <button onClick={downloadTemplate}>Download Template</button>
-                    <input type="file" accept=".csv" onChange={handleCSVUpload} />
+                    <h3>Manual Entry</h3>
+                    <form onSubmit={handleManualSubmit}>
+                        <div className="form-group">
+                            <label>Plate</label>
+                            <input 
+                                placeholder="ABC-123" 
+                                value={manualTruck.plate} 
+                                onChange={e => setManualTruck({...manualTruck, plate: e.target.value})} 
+                                required 
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Type</label>
+                            <select 
+                                value={manualTruck.type} 
+                                onChange={e => setManualTruck({...manualTruck, type: e.target.value})}
+                            >
+                                <option value="flatbed">Flatbed</option>
+                                <option value="refrigerated">Refrigerated</option>
+                                <option value="box">Box</option>
+                                <option value="tipper">Tipper</option>
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Capacity (T)</label>
+                            <input 
+                                placeholder="24" 
+                                type="number" 
+                                value={manualTruck.capacity} 
+                                onChange={e => setManualTruck({...manualTruck, capacity: e.target.value})} 
+                                required 
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Current Location</label>
+                            <input 
+                                placeholder="City" 
+                                value={manualTruck.location} 
+                                onChange={e => setManualTruck({...manualTruck, location: e.target.value})} 
+                                required 
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Return Destination</label>
+                            <input 
+                                placeholder="City" 
+                                value={manualTruck.return_destination} 
+                                onChange={e => setManualTruck({...manualTruck, return_destination: e.target.value})} 
+                                required 
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Status</label>
+                            <select 
+                                value={manualTruck.status} 
+                                onChange={e => setManualTruck({...manualTruck, status: e.target.value})}
+                            >
+                                <option value="available">Available</option>
+                                <option value="busy">Busy</option>
+                                <option value="maintenance">Maintenance</option>
+                            </select>
+                        </div>
+                        <button type="submit" style={{ gridColumn: 'span 2' }}>Add Truck to Fleet</button>
+                    </form>
                 </section>
 
-                <section>
-                    <h3>Copy-Paste Dispatch Log Parser</h3>
-                    <textarea 
-                        rows="5" 
-                        placeholder="Paste log here... e.g. TRUCK ABC123 - FLATBED - 22T - FROM Pretoria TO Durban - STATUS Available"
-                        value={dispatchLog}
-                        onChange={e => setDispatchLog(e.target.value)}
-                    ></textarea>
-                    <button onClick={parseDispatchLog}>Parse & Import</button>
+                <section className="import-actions">
+                    <h3>Import Fleet</h3>
+                    <div className="csv-upload">
+                        <p>Bulk upload via CSV</p>
+                        <button onClick={downloadTemplate} style={{ marginBottom: '10px' }}>Template</button>
+                        <input type="file" accept=".csv" onChange={handleCSVUpload} />
+                    </div>
+                    <div className="log-parser">
+                        <p>Paste Dispatch Log</p>
+                        <textarea 
+                            rows="4" 
+                            placeholder="TRUCK ABC123 - FLATBED - 22T - FROM Pretoria TO Durban"
+                            value={dispatchLog}
+                            onChange={e => setDispatchLog(e.target.value)}
+                        ></textarea>
+                        <button onClick={() => setMessage('Log parsing feature in development')}>Parse & Import</button>
+                    </div>
                 </section>
             </div>
 
@@ -237,20 +220,47 @@ const FleetManager = () => {
                     <tbody>
                         {trucks.map(truck => (
                             <tr key={truck.id}>
-                                <td>{truck.plate}</td>
+                                <td><strong>{truck.plate}</strong></td>
                                 <td>{truck.type}</td>
                                 <td>{truck.capacity}T</td>
                                 <td>{truck.location}</td>
                                 <td>{truck.return_destination}</td>
-                                <td>{truck.status}</td>
-                                <td>
-                                    <button onClick={() => handleDelete(truck.id)}>Delete</button>
+                                <td><span className={`status-badge ${truck.status}`}>{truck.status}</span></td>
+                                <td className="actions-cell">
+                                    <button className="auction-btn" onClick={() => handleOpenListingModal(truck)}>Auction</button>
+                                    <button className="delete-btn" onClick={() => handleDelete(truck.id)}>Remove</button>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </section>
+
+            {showListingModal && (
+                <div className="modal-overlay">
+                    <div className="modal">
+                        <h3>Create Auction Listing</h3>
+                        <form onSubmit={handleListingSubmit}>
+                            <div className="form-group">
+                                <label>Route From</label>
+                                <input value={auctionListing.route_from} onChange={e => setAuctionListing({...auctionListing, route_from: e.target.value})} required />
+                            </div>
+                            <div className="form-group">
+                                <label>Route To</label>
+                                <input value={auctionListing.route_to} onChange={e => setAuctionListing({...auctionListing, route_to: e.target.value})} required />
+                            </div>
+                            <div className="form-group">
+                                <label>Available Capacity (T)</label>
+                                <input type="number" value={auctionListing.available_capacity} onChange={e => setAuctionListing({...auctionListing, available_capacity: e.target.value})} required />
+                            </div>
+                            <div className="modal-actions">
+                                <button type="submit">Create Listing</button>
+                                <button type="button" className="cancel-btn" onClick={() => setShowListingModal(false)}>Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
