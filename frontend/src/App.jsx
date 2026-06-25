@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, NavLink } from 'react-router-dom'
 import axios from 'axios'
 import FleetManager from './FleetManager'
+import FreightManager from './FreightManager'
+import Dashboard from './Dashboard'
 import AuctionPage from './AuctionPage'
 import './App.css'
 
@@ -21,7 +23,9 @@ function App() {
           <div className="header-left">
             <h1>Dead Mile Auction Sniper</h1>
             <nav className="main-nav">
-              <NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''} end>Fleet Capacity</NavLink>
+              <NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''} end>Dashboard</NavLink>
+              <NavLink to="/fleet" className={({ isActive }) => isActive ? 'active' : ''}>Fleet Management</NavLink>
+              <NavLink to="/loads" className={({ isActive }) => isActive ? 'active' : ''}>Freight Loads</NavLink>
               <NavLink to="/auction" className={({ isActive }) => isActive ? 'active' : ''}>Live Auction</NavLink>
             </nav>
           </div>
@@ -32,7 +36,9 @@ function App() {
 
         <main>
           <Routes>
-            <Route path="/" element={<FleetManager />} />
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/fleet" element={<FleetManager />} />
+            <Route path="/loads" element={<FreightManager />} />
             <Route path="/auction" element={<AuctionPage />} />
           </Routes>
         </main>
