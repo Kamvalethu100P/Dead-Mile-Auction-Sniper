@@ -26,6 +26,12 @@ const OfferModal = ({ match, onClose }) => {
         window.open(`https://wa.me/?text=${text}`, '_blank');
     };
 
+    const openEmail = () => {
+        const subject = encodeURIComponent(`Available Return Capacity: ${route}`);
+        const body = encodeURIComponent(templates.email.split('\n\n').slice(1).join('\n\n'));
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    };
+
     return (
         <div className="modal-overlay">
             <div className="modal offer-modal">
@@ -60,15 +66,35 @@ const OfferModal = ({ match, onClose }) => {
                 </div>
 
                 <div className="tab-content">
-                    <pre className="offer-preview">
-                        {templates[activeTab]}
-                    </pre>
+                    {activeTab === 'quotation' ? (
+                        <div className="quotation-preview">
+                            <div className="quote-brand">Dead Mile Auction Sniper</div>
+                            <div className="quote-title">OFFICIAL FREIGHT QUOTATION</div>
+                            <hr />
+                            <div className="quote-row"><strong>Route:</strong> {route}</div>
+                            <div className="quote-row"><strong>Vehicle:</strong> {truckType} ({capacity}T)</div>
+                            <div className="quote-row"><strong>Expected Rate:</strong> R{price.toLocaleString()}</div>
+                            <div className="quote-row"><strong>Validity:</strong> 24 Hours</div>
+                            <div className="quote-row"><strong>Dispatch:</strong> Immediate</div>
+                            <hr />
+                            <small>Generated via Dead Mile Instant Offer System</small>
+                        </div>
+                    ) : (
+                        <pre className="offer-preview">
+                            {templates[activeTab]}
+                        </pre>
+                    )}
                 </div>
 
                 <div className="modal-actions">
                     {activeTab === 'whatsapp' && (
                         <button className="whatsapp-btn" onClick={openWhatsApp}>
                             Send via WhatsApp
+                        </button>
+                    )}
+                    {activeTab === 'email' && (
+                        <button className="email-btn" onClick={openEmail}>
+                            Open in Email Client
                         </button>
                     )}
                     <button onClick={() => copyToClipboard(templates[activeTab])}>
