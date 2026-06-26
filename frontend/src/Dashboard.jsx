@@ -4,11 +4,14 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area
 } from 'recharts';
+import OfferModal from './OfferModal';
 
 const Dashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [showOfferModal, setShowOfferModal] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -25,6 +28,11 @@ const Dashboard = () => {
       setError('Failed to load dashboard data. Please ensure the backend is running.');
       setLoading(false);
     }
+  };
+
+  const handleOpenOffer = (match) => {
+    setSelectedMatch(match);
+    setShowOfferModal(true);
   };
 
   if (loading) return <div className="dashboard-loading">Loading Enterprise Analytics...</div>;
@@ -191,6 +199,7 @@ const Dashboard = () => {
                   <th>Route</th>
                   <th>Match</th>
                   <th>Value</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -200,6 +209,11 @@ const Dashboard = () => {
                     <td>{opp.load_pickup} → {opp.load_dropoff}</td>
                     <td><span className="match-badge">{opp.score}%</span></td>
                     <td className="success-text">{formatCurrency(opp.estimated_revenue)}</td>
+                    <td>
+                      <button className="offer-btn-mini" onClick={() => handleOpenOffer(opp)}>
+                        Offer
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -207,6 +221,13 @@ const Dashboard = () => {
           </div>
         </section>
       </div>
+
+      {showOfferModal && (
+        <OfferModal 
+          match={selectedMatch} 
+          onClose={() => setShowOfferModal(false)} 
+        />
+      )}
     </div>
   );
 };

@@ -336,6 +336,25 @@ function calculateRevenueLeakage(trucks, loads, matches) {
     ? Math.round(matches.reduce((s, m) => s + m.score, 0) / matches.length)
     : 0;
 
+  // Route-specific analysis
+  const routeLeakage = {};
+  for (const truck of trucks) {
+    if (truck.location && truck.return_destination) {
+      const routeKey = `${truck.location} → ${truck.return_destination}`;
+      if (!routeLeakage[routeKey]) {
+        routeLeakage[routeKey] = { route: routeKey, empty_km: 0, lost_revenue: 0, count: 0 };
+      }
+      const dist = estimateDistance(truck.location, truck.return_destination);
+      routeLeakage[routeKey].empty_km += dist;
+      routeLeakage[routeKey].lost_revenue += dist * 14;
+      routeLeakage[routeKey].count += 1;
+    }
+  }
+
+  const worstRoutes = Object.values(routeLeakage)
+    .sort((a, b) => b.lost_revenue - a.lost_revenue)
+    .slice(0, 5);
+
   return {
     fleet_summary: {
       total_trucks: totalTrucks,
@@ -356,6 +375,7 @@ function calculateRevenueLeakage(trucks, loads, matches) {
       capture_rate: captureRate,
       avg_match_score: avgScore,
     },
+    worst_routes: worstRoutes,
     top_opportunities: matches
       .filter(m => m.tier === 'HIGH_PRIORITY')
       .sort((a, b) => b.estimated_revenue - a.estimated_revenue)

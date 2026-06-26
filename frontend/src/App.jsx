@@ -5,6 +5,7 @@ import FleetManager from './FleetManager'
 import FreightManager from './FreightManager'
 import Dashboard from './Dashboard'
 import AuctionPage from './AuctionPage'
+import Offers from './Offers'
 import './App.css'
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
               <NavLink to="/" className={({ isActive }) => isActive ? 'active' : ''} end>Dashboard</NavLink>
               <NavLink to="/fleet" className={({ isActive }) => isActive ? 'active' : ''}>Fleet Management</NavLink>
               <NavLink to="/loads" className={({ isActive }) => isActive ? 'active' : ''}>Freight Loads</NavLink>
+              <NavLink to="/offers" className={({ isActive }) => isActive ? 'active' : ''}>Offer Generator</NavLink>
               <NavLink to="/auction" className={({ isActive }) => isActive ? 'active' : ''}>Live Auction</NavLink>
             </nav>
           </div>
@@ -39,6 +41,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/fleet" element={<FleetManager />} />
             <Route path="/loads" element={<FreightManager />} />
+            <Route path="/offers" element={<Offers />} />
             <Route path="/auction" element={<AuctionPage />} />
           </Routes>
         </main>
