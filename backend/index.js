@@ -83,7 +83,7 @@ app.get('/api/loads', async (req, res) => {
 app.post('/api/loads', async (req, res) => {
     const { pickup, dropoff, cargo_type, load_size, price, urgency } = req.body;
     try {
-        await db.query(`INSERT INTO freight_loads (pickup, dropoff, cargo_type, load_size, price, urgency) VALUES ('${pickup}', '${dropoff}', '${cargo_type}', ${load_size}, ${price}, '${urgency}')`);
+        await db.query(`INSERT INTO freight_loads (pickup, dropoff, cargo_type, load_size, price, urgency, payment_status) VALUES ('${pickup}', '${dropoff}', '${cargo_type}', ${load_size}, ${price}, '${urgency}', 'unpaid')`);
         res.status(201).json({ message: 'Load added' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -98,9 +98,29 @@ app.post('/api/loads/bulk', async (req, res) => {
     try {
         for (const load of loads) {
             const { pickup, dropoff, cargo_type, load_size, price, urgency } = load;
-            await db.query(`INSERT INTO freight_loads (pickup, dropoff, cargo_type, load_size, price, urgency) VALUES ('${pickup}', '${dropoff}', '${cargo_type}', ${load_size}, ${price}, '${urgency}')`);
+            await db.query(`INSERT INTO freight_loads (pickup, dropoff, cargo_type, load_size, price, urgency, payment_status) VALUES ('${pickup}', '${dropoff}', '${cargo_type}', ${load_size}, ${price}, '${urgency}', 'unpaid')`);
         }
         res.status(201).json({ message: `${loads.length} loads added` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/loads/:id/pay', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query(`UPDATE freight_loads SET payment_status = 'pending_verification' WHERE id = ${id}`);
+        res.json({ message: 'Payment submitted for verification' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/loads/:id/verify', async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query(`UPDATE freight_loads SET payment_status = 'verified' WHERE id = ${id}`);
+        res.json({ message: 'Payment verified' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -212,240 +232,164 @@ app.get('/api/auction/listings', async (req, res) => {
     }
 });
 
-app.post('/api/auction/bids', async (req, res) => {
-    const { listing_id, broker_name, amount, contact_info } = req.body;
-    try {
-        await db.query(`INSERT INTO auction_bids (listing_id, broker_name, amount, contact_info) VALUES (${listing_id}, '${broker_name}', ${amount}, '${contact_info}')`);
-        res.status(201).json({ message: 'Bid placed successfully' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+// ============================================================
+// Payment Verification System
+// ============================================================
+
+const BANK_DETAILS = {
+  bank: 'Standard Bank',
+  account_number: '10243855972',
+  branch_code: '051001',
+  reference: 'DEAD MILE AUCTION SNIPER',
+  pop_email: 'kamva100@proton.me',
+};
+
+/**
+ * POST /api/payments/proceed
+ * Creates a payment record for a load and sets it to pending_verification.
+ * This is the ONLY endpoint that should trigger bank details to be shown.
+ */
+app.post('/api/payments/proceed', async (req, res) => {
+  try {
+    const { load_id } = req.body;
+    if (!load_id) {
+      return res.status(400).json({ error: 'load_id is required' });
     }
+
+    // Verify the load exists
+    const load = (await db.query(`SELECT * FROM freight_loads WHERE id = ${load_id}`))[0];
+    if (!load) {
+      return res.status(404).json({ error: 'Load not found' });
+    }
+
+    // Check if already has a payment
+    const existing = await db.query(`SELECT * FROM payments WHERE load_id = ${load_id} AND status != 'verified'`);
+    if (existing && existing.length > 0) {
+      return res.status(409).json({ error: 'Payment already in progress for this load', payment_id: existing[0].id });
+    }
+
+    // Create payment record (starts as pending_verification)
+    const result = await db.query(
+      `INSERT INTO payments (load_id, amount) VALUES (${load_id}, ${load.price})`
+    );
+
+    // Get the created payment
+    const payments = await db.query(`SELECT * FROM payments WHERE load_id = ${load_id} ORDER BY id DESC LIMIT 1`);
+    const payment = payments[0];
+
+    // Update load payment status
+    await db.query(`UPDATE freight_loads SET payment_status = 'pending_verification' WHERE id = ${load_id}`);
+
+    res.status(201).json({
+      payment_id: payment.id,
+      load_id: load.id,
+      amount: load.price,
+      status: 'pending_verification',
+      message: 'Payment initiated. Bank details are now available.',
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-app.get('/api/auction/listings/:id/bids', async (req, res) => {
-    const { id } = req.params;
-    try {
-        const bids = await db.query(`SELECT * FROM auction_bids WHERE listing_id = ${id} ORDER BY amount DESC`);
-        res.json(bids);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+/**
+ * GET /api/payments/bank-details/{payment_id}
+ * GATEKEPT: Returns bank details ONLY if a payment record exists.
+ * Returns 403 if no valid payment record is found.
+ */
+app.get('/api/payments/bank-details/:payment_id', async (req, res) => {
+  try {
+    const { payment_id } = req.params;
+    const payment = (await db.query(`SELECT * FROM payments WHERE id = ${payment_id}`))[0];
+
+    if (!payment) {
+      return res.status(403).json({ error: 'No payment initiated. Bank details are only available after proceeding to pay.' });
     }
+
+    res.json({
+      payment_id: payment.id,
+      load_id: payment.load_id,
+      amount: payment.amount,
+      status: payment.status,
+      bank_details: BANK_DETAILS,
+      instructions: [
+        '1. Transfer the exact amount to the Standard Bank account below.',
+        `2. Use the reference: ${BANK_DETAILS.reference}`,
+        `3. Email your Proof of Payment (POP) to ${BANK_DETAILS.pop_email}`,
+        '4. Your load will be activated once payment is verified.',
+      ],
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/payments/verify/{payment_id}
+ * Admin endpoint — marks payment as verified and activates the load.
+ */
+app.post('/api/payments/verify/:payment_id', async (req, res) => {
+  try {
+    const { payment_id } = req.params;
+    const payment = (await db.query(`SELECT * FROM payments WHERE id = ${payment_id}`))[0];
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    if (payment.status === 'verified') {
+      return res.status(409).json({ error: 'Payment already verified' });
+    }
+
+    // Mark payment as verified
+    await db.query(
+      `UPDATE payments SET status = 'verified', verified_at = datetime('now') WHERE id = ${payment_id}`
+    );
+
+    // Update the load payment status
+    await db.query(
+      `UPDATE freight_loads SET payment_status = 'verified' WHERE id = ${payment.load_id}`
+    );
+
+    res.json({
+      message: 'Payment verified successfully',
+      payment_id: payment.id,
+      load_id: payment.load_id,
+      status: 'verified',
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/loads/{id}/payment-status
+ * Returns the payment status of a load.
+ */
+app.get('/api/loads/:id/payment-status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const load = (await db.query(`SELECT id, pickup, dropoff, price, payment_status FROM freight_loads WHERE id = ${id}`))[0];
+
+    if (!load) {
+      return res.status(404).json({ error: 'Load not found' });
+    }
+
+    // Get associated payment records
+    const payments = await db.query(`SELECT id, amount, status, created_at, verified_at FROM payments WHERE load_id = ${id} ORDER BY id DESC`);
+
+    res.json({
+      load_id: load.id,
+      payment_status: load.payment_status || 'pending',
+      route: `${load.pickup} → ${load.dropoff}`,
+      amount: load.price,
+      payments: payments || [],
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.listen(port, () => {
     console.log(`Backend server listening on port ${port}`);
-});
-
-// ============================================================
-// EFT Invoicing System
-// ============================================================
-
-const PLAN_TIERS = {
-  'Growth': { price: 20000, gmv_percent: 7, label: 'Growth Fleet', max_trucks: 35, features: ['Up to 35 trucks', '7% GMV fee', 'Basic matching engine', 'Email support'] },
-  'Professional': { price: 35000, gmv_percent: 10, label: 'Professional Fleet', max_trucks: 150, features: ['Up to 150 trucks', '10% GMV fee', 'Advanced matching engine', 'Priority support', 'Revenue analytics'] },
-  'Enterprise': { price: 65000, gmv_percent: 15, label: 'Enterprise Fleet', max_trucks: 'Unlimited', features: ['Unlimited trucks', '15% GMV fee', 'Full AI matching engine', 'Dedicated account manager', 'Custom integrations', 'Advanced analytics'] },
-};
-
-async function getNextInvoiceNumber() {
-  const result = await db.query("SELECT COUNT(*) as cnt FROM invoices");
-  const count = (result && result[0] && result[0].cnt) || 0;
-  const year = new Date().getFullYear();
-  const padded = String(count + 1).padStart(4, '0');
-  return `DMA-${year}-${padded}`;
-}
-
-app.post('/api/invoices/create', async (req, res) => {
-  try {
-    const { customer_name, company, email, phone, plan_tier } = req.body;
-    if (!customer_name || !company || !email || !plan_tier) {
-      return res.status(400).json({ error: 'Missing required fields: customer_name, company, email, plan_tier' });
-    }
-    const plan = PLAN_TIERS[plan_tier];
-    if (!plan) {
-      return res.status(400).json({ error: `Invalid plan tier: ${plan_tier}. Must be Growth, Professional, or Enterprise` });
-    }
-    const invoice_number = await getNextInvoiceNumber();
-    const result = await db.query(
-      `INSERT INTO invoices (invoice_number, customer_name, company, email, phone, plan_tier, amount, gmv_percent)
-       VALUES ('${invoice_number}', '${customer_name.replace(/'/g, "''")}', '${company.replace(/'/g, "''")}', '${email}', '${(phone || '').replace(/'/g, "''")}', '${plan_tier}', ${plan.price}, ${plan.gmv_percent})`
-    );
-    const invoice = (await db.query(`SELECT * FROM invoices WHERE invoice_number = '${invoice_number}'`))[0];
-    if (!invoice) {
-      // Get by last insert if number lookup fails
-      const all = await db.query("SELECT * FROM invoices ORDER BY id DESC LIMIT 1");
-      return res.status(201).json({ ...all[0], plan_details: plan });
-    }
-    res.status(201).json({ ...invoice, plan_details: plan });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/invoices', async (req, res) => {
-  try {
-    const invoices = await db.query('SELECT * FROM invoices ORDER BY id DESC');
-    res.json(invoices);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/invoices/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const isNumber = /^\d+$/.test(id);
-    let invoice;
-    if (isNumber) {
-      invoice = (await db.query(`SELECT * FROM invoices WHERE id = ${id}`))[0];
-    } else {
-      invoice = (await db.query(`SELECT * FROM invoices WHERE invoice_number = '${id.replace(/'/g, "''")}'`))[0];
-    }
-    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
-    const plan = PLAN_TIERS[invoice.plan_tier] || {};
-    res.json({ ...invoice, plan_details: plan });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/invoices/:id/download', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const isNumber = /^\d+$/.test(id);
-    let invoice;
-    if (isNumber) {
-      invoice = (await db.query(`SELECT * FROM invoices WHERE id = ${id}`))[0];
-    } else {
-      invoice = (await db.query(`SELECT * FROM invoices WHERE invoice_number = '${id.replace(/'/g, "''")}'`))[0];
-    }
-    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
-
-    const plan = PLAN_TIERS[invoice.plan_tier] || {};
-    const createdDate = new Date(invoice.created_at || Date.now());
-    const formattedDate = createdDate.toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' });
-    const dueDate = new Date(createdDate);
-    dueDate.setDate(dueDate.getDate() + 30);
-    const formattedDue = dueDate.toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' });
-
-    const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Invoice ${invoice.invoice_number} — Dead Mile Auction Sniper</title>
-<style>
-  @page { margin: 20mm; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a2e; line-height: 1.6; padding: 40px; max-width: 800px; margin: 0 auto; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; border-bottom: 3px solid #e94560; padding-bottom: 20px; }
-  .header h1 { font-size: 28px; color: #e94560; }
-  .header .invoice-meta { text-align: right; }
-  .header .invoice-meta h2 { font-size: 24px; color: #1a1a2e; }
-  .header .invoice-meta p { color: #666; }
-  .details { display: flex; justify-content: space-between; margin-bottom: 40px; }
-  .details .bill-to { flex: 1; }
-  .details .bill-to h3 { font-size: 16px; color: #e94560; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-  .details .bill-to p { margin-bottom: 4px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-  th { background: #1a1a2e; color: white; padding: 12px 15px; text-align: left; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
-  td { padding: 12px 15px; border-bottom: 1px solid #eee; }
-  .total-row td { font-weight: bold; font-size: 18px; border-top: 2px solid #1a1a2e; border-bottom: none; }
-  .total-row .amount { color: #e94560; font-size: 22px; }
-  .banking { background: #f8f9fa; border: 2px solid #e94560; border-radius: 8px; padding: 25px; margin-bottom: 30px; }
-  .banking h3 { color: #1a1a2e; margin-bottom: 15px; font-size: 18px; }
-  .banking .detail-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e0e0e0; }
-  .banking .detail-row:last-child { border-bottom: none; }
-  .banking .label { font-weight: 600; color: #555; }
-  .banking .value { font-family: monospace; font-size: 16px; color: #1a1a2e; }
-  .reference { background: #e94560; color: white; text-align: center; padding: 12px; border-radius: 6px; font-size: 18px; font-weight: bold; letter-spacing: 2px; margin-bottom: 30px; }
-  .footer { text-align: center; color: #999; font-size: 13px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; }
-  .print-btn { display: block; margin: 20px auto; padding: 12px 30px; background: #1a1a2e; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
-  @media print { .print-btn { display: none; } body { padding: 0; } }
-</style>
-</head>
-<body>
-  <button class="print-btn" onclick="window.print()">Print / Download PDF</button>
-
-  <div class="header">
-    <div>
-      <h1>Dead Mile Auction Sniper</h1>
-      <p style="color:#666;margin-top:4px;">Logistics Intelligence Platform</p>
-    </div>
-    <div class="invoice-meta">
-      <h2>INVOICE</h2>
-      <p><strong>${invoice.invoice_number}</strong></p>
-      <p>Date: ${formattedDate}</p>
-      <p>Due: ${formattedDue}</p>
-    </div>
-  </div>
-
-  <div class="details">
-    <div class="bill-to">
-      <h3>Bill To</h3>
-      <p><strong>${invoice.customer_name}</strong></p>
-      <p>${invoice.company}</p>
-      <p>${invoice.email}</p>
-      ${invoice.phone ? `<p>${invoice.phone}</p>` : ''}
-    </div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Description</th>
-        <th>Details</th>
-        <th style="text-align:right">Amount (ZAR)</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><strong>${plan.label || invoice.plan_tier}</strong></td>
-        <td>Monthly subscription. ${plan.max_trucks ? 'Up to ' + plan.max_trucks + ' trucks.' : ''} ${plan.gmv_percent ? plan.gmv_percent + '% GMV fee on matched loads.' : ''}</td>
-        <td style="text-align:right">R ${(invoice.amount || 0).toLocaleString('en-ZA')}.00</td>
-      </tr>
-      <tr>
-        <td colspan="2" style="text-align:right"><strong>Monthly GMV Fee</strong></td>
-        <td style="text-align:right">${invoice.gmv_percent || 0}% of GMV</td>
-      </tr>
-      <tr class="total-row">
-        <td colspan="2" style="text-align:right">Total Due</td>
-        <td class="amount" style="text-align:right">R ${(invoice.amount || 0).toLocaleString('en-ZA')}.00</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="banking">
-    <h3>EFT Payment Details</h3>
-    <div class="detail-row">
-      <span class="label">Bank</span>
-      <span class="value">Standard Bank</span>
-    </div>
-    <div class="detail-row">
-      <span class="label">Account Number</span>
-      <span class="value">10243855972</span>
-    </div>
-    <div class="detail-row">
-      <span class="label">Branch Code</span>
-      <span class="value">051001</span>
-    </div>
-    <div class="detail-row">
-      <span class="label">Account Type</span>
-      <span class="value">Business Cheque Account</span>
-    </div>
-  </div>
-
-  <div class="reference">
-    Payment Reference: ${invoice.invoice_number} — ${invoice.company}
-  </div>
-
-  <div class="footer">
-    <p>Dead Mile Auction Sniper &copy; ${new Date().getFullYear()}. All rights reserved.</p>
-    <p>For queries: accounts@deadmile.dev</p>
-  </div>
-</body>
-</html>`;
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(html);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
 });
